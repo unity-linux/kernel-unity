@@ -20,7 +20,7 @@ script:
   - docker run --privileged=true -d -v "$(pwd):/rpmbuild" -v "/dev:/dev" $DID tail -f /dev/null
   - export CID=$(docker ps -l | awk '{print $1}' | grep -v -m1 'CONTAINER')
   - echo $CID
-  - docker exec $CID /bin/sh -c 'cd /rpmbuild && make srpm'
+  - docker exec $CID /bin/sh -c 'cd /rpmbuild && dnf install wget -y && make srpm'
   - find ~/ -name *.src.rpm
 
 after_success:
