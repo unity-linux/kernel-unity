@@ -41,7 +41,7 @@ get:
 	@echo
 
 srpm_build:
-	$(RPMBUILD) "--define" "_sourcedir $(shell pwd)" -bs $(NAME).spec
+	$(RPMBUILD) "--define" "_sourcedir $(shell pwd)" "--define" "_topdir $(shell pwd)" -bs $(NAME).spec
 	@$(RM) -rf SOURCES SPECS BUILD BUILDROOT RPMS
 
 srpm: spec get srpm_build
