@@ -1,0 +1,28 @@
+sudo: required
+language: bash
+services:
+  - docker
+install: true
+
+before_install:
+  - openssl aes-256-cbc -K $encrypted_e951d671e5d1_key -iv $encrypted_e951d671e5d1_iv -in .stuff.tar.gz.enc -out stuff.tar.gz -d
+  - file stuff.tar.gz
+  - tar xzvf stuff.tar.gz -C /tmp/
+  - eval "$(ssh-agent -s)"
+  - chmod 600 /tmp/stuff/.deploy
+  - ssh-add /tmp/stuff/.deploy
+  - mv /tmp/stuff/.host ~/.ssh/config
+  - docker pull jmiahman/mageia-rpmbuilder
+
+script:
+  - export DID=$(docker image ls | grep -m1 mageia-rpmbuilder | awk '{print $3}')
+  - echo $DID
+  - docker run --privileged=true -d -v "$(pwd):/rpmbuild" -v "/dev:/dev" $DID tail -f /dev/null
+  - export CID=$(docker ps -l | awk '{print $1}' | grep -v -m1 'CONTAINER')
+  - echo $CID
+  - docker exec $CID /bin/sh -c 'cd /rpmbuild && make srpm' --privileged=true
+  - find ~/ -name *.src.rpm
+
+after_success:
+  - sudo -H pip install --upgrade pyOpenSSL ndg-httpsclient pyasn1 requests[security] jinja2 marshmallow copr-cli simplejson
+  - if [ -f $(find ~/ -name *.src.rpm) ]; then copr-cli --config /tmp/stuff/.copr build -r Mageia-6-x86_64 jmiahman/Unity-Linux $(find ~/ -name *.src.rpm); fi
