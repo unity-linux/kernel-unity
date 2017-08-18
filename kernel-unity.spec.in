@@ -285,7 +285,8 @@ processor mode, use the "nosmp" boot parameter.
 
 %define kprovides1 	%{kname} = %{kverrel}
 %define kprovides2 	kernel = %{tar_ver}
-%define kprovides3 	alsa = 1.0.26
+%define kprovides3 	kernel-desktop = %{tar_ver}
+%define kprovides4 	alsa = 1.0.26
 %define kprovides_server drbd-api = 88
 
 # conflict dkms packages that dont support kernel-4.12
@@ -358,7 +359,7 @@ BuildRequires:		numa-devel
 %package -n %{kname}-%{1}-%{buildrel}			\
 Version:	%{fakever}				\
 Release:	%{fakerel}				\
-Provides:	%kprovides1 %kprovides2 %kprovides3	\
+Provides:	%kprovides1 %kprovides2 %kprovides3  %kprovides4 \
 %{expand:%%{?kprovides_%{1}:Provides: %{kprovides_%{1}}}} \
 Provides:	%{kname}-%{1}				\
 Provides:	kernel-%{1}				\
@@ -392,7 +393,9 @@ Requires:	glibc-devel ncurses-devel make gcc perl	\
 Summary:	The kernel-devel files for %{kname}-%{1}-%{buildrel} \
 Group:		Development/Kernel			\
 Provides:	%{kname}-devel = %{kverrel} 		\
+Provides:	kernel-%{1}-devel			\
 Provides:	%{kname}-%{1}-devel			\
+Recommends:	kernel-%{1}-devel-latest		\
 Recommends:	%{kname}-%{1}-devel-latest		\
 %ifarch %{ix86}						\
 Conflicts:	arch(x86_64)				\
@@ -449,6 +452,7 @@ Requires:	%{kname}-%{1}-devel-%{buildrel}		\
 %ifarch %{ix86}						\
 Conflicts:	arch(x86_64)				\
 %endif							\
+Provides:	kernel-devel-latest			\
 Provides:	%{kname}-devel-latest			\
 %description -n %{kname}-%{1}-devel-latest		\
 This package is a virtual rpm that aims to make sure you always have the \
