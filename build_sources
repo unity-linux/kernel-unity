@@ -1,0 +1,38 @@
+#!/bin/sh
+#---------------------------------------------------------------
+# Project         : Mageia
+# Module          : kernel
+# File            : build_sources
+# Version         : $Id$
+# Author          : Frederic Lepied
+# Created On      : Wed Jun 29 07:45:10 2005
+# Purpose         : build the tarball of patches to be able to
+#                  build the src.rpm of the kernel.
+#---------------------------------------------------------------
+
+if [ ! -d ./PATCHES ]; then
+	svn co svn://svn.mageia.org/packages/cauldron/kernel/current/PATCHES/
+else
+	cd ./PATCHES
+	svn up
+	cd ..
+fi
+
+if [ ! -d ./SOURCES ]; then
+	svn co svn://svn.mageia.org/packages/cauldron/kernel/current/SOURCES/
+	cp ./SOURCES/* .
+	rm -rf ./SOURCES/
+else
+	cd ./SOURCES
+	svn up
+	cd ..
+	cp ./SOURCES/* .
+	rm -rf ./SOURCES/
+fi
+
+
+make tar-patches
+
+rm -rf ./PATCHES/
+
+# build_sources.sh ends here

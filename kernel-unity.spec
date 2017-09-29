@@ -10,15 +10,15 @@
 #
 # Mageia kernels use kernel.org versioning
 #
-%define kernelversion	@VER@
-%define patchlevel	@PATCHVER@
+%define kernelversion	4
+%define patchlevel	12
 # sublevel is now used for -stable patches
-%define sublevel	@SUBVER@
+%define sublevel	14
 # extstable is for extended stable patches
 %define extstable	0
 
 # Package release
-%define mgarel		@DISTREL@
+%define mgarel		1
 
 # kernel Makefile extraversion is substituted by
 # kpatch which are either 0 (empty), rc (kpatch)
@@ -293,8 +293,8 @@ processor mode, use the "nosmp" boot parameter.
 %define kconflicts1	dkms-broadcom-wl < 6.30.223.271-47
 %define kconflicts2	dkms-fglrx <= 15.302
 %define kconflicts3	dkms-nvidia-current < 375.82-1
-%define kconflicts4	dkms-nvidia340 < 340.102-6
-%define kconflicts5	dkms-nvidia304 < 304.135-6
+%define kconflicts4	dkms-nvidia340 < 340.104-1
+%define kconflicts5	dkms-nvidia304 < 304.137-1
 %define kconflicts6	dkms-virtualbox < 5.1.26-1
 %define kconflicts7	dkms-xtables-addons < 2.13-1
 # (tmb) conflict older btrfs-progs to get the new in same transaction and in initrd
