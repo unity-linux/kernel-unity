@@ -1,56 +1,143 @@
-NAME=kernel-unity
-VER=4
-PATCHVER=12
-SUBVER=8
-DISTREL=1
-VERSION=$(VER).$(PATCHVER).$(SUBVER)-$(DISTREL)
-PATCHFULLVER=$(VER).$(PATCHVER).$(SUBVER)
-KERVER=$(VER).$(PATCHVER)
+CURDIR		= $(shell pwd)
+PACKAGE		= kernel
+SPEC		= kernel-unity.spec
+SPECQUERY	= --specfile $(SPEC) --define "_topdir $(CURDIR)"
 
-RPMBUILD=$(shell which rpmbuild)
-CAT=$(shell which cat)
-SED=$(shell which sed)
-RM=$(shell which rm)
-WGET=$(shell which wget)
+# Since we now have a correctly versioned srpm, we can query it for the info we need
+KPATCH		:= $(shell sed -n '/^%define kpatch\t\t/s///p' $(SPEC) | sed 's/\(.*\)/\1-/' | sed 's/^0-//')
+MGAREL		:= $(shell sed -n '/^%define mgarel\t\t/s///p' $(SPEC))
+VERSION		:= $(shell rpm -q --qf '%{VERSION}\n' $(SPECQUERY) | head -1 )
+RELEASE		:= $(shell rpm -q --qf '%{RELEASE}\n' $(SPECQUERY) | head -1 )
+KVERREL		= $(VERSION)-$(RELEASE)
+SRPM_NAME	:= $(shell rpm -q --qf '%{NAME}-%{VERSION}-%{RELEASE}.src.rpm\n' $(SPECQUERY) | head -1)
+KVERSION	= $(shell echo $(VERSION) | cut -d. -f1)
+KPATCHLEVEL	= $(shell echo $(VERSION) | cut -d. -f2)
+KSUBLEVEL	= $(shell echo $(VERSION) | cut -d. -f3)
+KMAJMIN		= $(KVERSION).$(KPATCHLEVEL)
+TAR_VER		= $(KVERSION).$(KPATCHLEVEL).$(shell expr $(KSUBLEVEL) - 0$(shell echo $(KPATCH) | sed 's/..*/1/'))
 
-all:
+PATCHES_DIR	= PATCHES
+GENFILES_DIR	= $(shell pwd)
+BUILDDIR	:= $(shell mktemp -d $${TMPDIR:-/tmp}/tmp.XXXXXX)
 
-$(NAME).spec: $(NAME).spec.in
-	@$(CAT) $(NAME).spec.in | \
-		$(SED) -e 's,@VER@,$(VER),g' | \
-		$(SED) -e 's,@PATCHVER@,$(PATCHVER),g'| \
-		$(SED) -e 's,@SUBVER@,$(SUBVER),g' | \
-		$(SED) -e 's,@DISTREL@,$(DISTREL),g' \
-			>$(NAME).spec
+LOCAL_DIR	= $(shell basename $(CURDIR))
+SVN_URL		:= $(shell svn info | sed -n '/^URL[^:]*:  *\(.*\)/s//\1/p')
+SVN_BASE	:= $(shell dirname $(SVN_URL))
+
+CP		= cp -p
+RPM_TOP_DIR 	= $(CURDIR)
+SRC_DIR		= $(CURDIR)
+RPM		= rpmbuild --define "_topdir $(RPM_TOP_DIR)" --define "_sourcedir $(SRC_DIR)"
+WGET		= $(shell which wget)
+
+rpm-dirs = BUILD SPECS SOURCES RPMS SRPMS
+
+rpm-specfile = $(SPEC)
+
+raw-tar-kernel = linux-$(KMAJMIN).tar.xz
+tar-kernel = $(GENFILES_DIR)/$(raw-tar-kernel)
+rpm-tar-kernel = $(raw-tar-kernel)
+
+patches-kverrel = $(VERSION)-$(KPATCH)mga$(MGAREL)
+raw-tar-patches = linux-$(patches-kverrel).tar.xz
+tar-patches = $(GENFILES_DIR)/$(raw-tar-patches)
+tar-patches-ts = $(GENFILES_DIR)/.time-stamp-linux-$(patches-kverrel)
+rpm-tar-patches = $(raw-tar-patches)
+
+rpm-variable-sources = \
+	$(rpm-tar-kernel) $(rpm-tar-patches)
+
+rpm-immuable-sources = \
+	README.kernel-sources
+
+help:
+	@echo "This top-level Makefile is for creating Mageia kernel packages."
 	@echo
-	@echo "$(NAME).spec generated in $$PWD"
+	@echo "The following targets are available:"
+	@echo "  localsrpm	build source package $(SRPM_NAME)"
+	@echo "  localrpm	build binary packages"
+	@echo "  localrpms	build both source and binary packages"
+	@echo "  svntag	tag the current workspace"
+	@echo "  changelog	update and commit ChangeLog entries"
+	@echo "  rpm		build all rpms + changelog + svntag"
 	@echo
+	@echo "You can pass extra flags to rpmbuild through the RPM_OPTIONS variable."
 
-spec: $(NAME).spec
-
-get:
+getsrc:
 	@echo
 	@echo "Downloading Kernel Source & Kernel Patch"
 	@echo
-	@$(WGET) https://cdn.kernel.org/pub/linux/kernel/v$(VER).x/linux-$(KERVER).tar.xz
-	@$(WGET) https://cdn.kernel.org/pub/linux/kernel/v$(VER).x/linux-$(KERVER).tar.sign 
-	@$(WGET) https://cdn.kernel.org/pub/linux/kernel/v$(VER).x/patch-$(PATCHFULLVER).xz
-	@$(WGET) https://cdn.kernel.org/pub/linux/kernel/v$(VER).x/patch-$(PATCHFULLVER).sign
+	@$(WGET) -c https://cdn.kernel.org/pub/linux/kernel/v$(KVERSION).x/linux-$(KMAJMIN).tar.xz
+	@$(WGET) -c https://cdn.kernel.org/pub/linux/kernel/v$(KVERSION).x/linux-$(KMAJMIN).tar.sign 
+	@$(WGET) -c https://cdn.kernel.org/pub/linux/kernel/v$(KVERSION).x/patch-$(TAR_VER).xz
+	@$(WGET) -c https://cdn.kernel.org/pub/linux/kernel/v$(KVERSION).x/patch-$(TAR_VER).sign
 	@echo
 	@echo "Downloading Kernel Source & Kernel Patch Finished"
 	@echo
 
-srpm_build:
-	$(RPMBUILD) "--define" "_sourcedir $(shell pwd)" "--define" "_topdir $(shell pwd)" -bs $(NAME).spec
-	@$(RM) -rf SOURCES SPECS BUILD BUILDROOT RPMS
+LOGS_DIR = logs
+$(LOGS_DIR)::
+	@[ -d $(LOGS_DIR) ] || mkdir -p $(LOGS_DIR) > /dev/null 2>&1
 
-srpm: spec get srpm_build
+WORK_DIR = $(PWD)/work
+$(WORK_DIR)::
+	@[ -d $(WORK_DIR) ] || mkdir -p $(WORK_DIR) > /dev/null 2>&1
+
+$(rpm-dirs):
+	mkdir -p $@
+
+localrpmprep: $(LOGS_DIR) rpm-tree
+	@echo "### Patching kernel tree"
+	$(RPM) -bp $(RPM_OPTIONS) $(rpm-specfile) >& $(LOGS_DIR)/build-prep-$(PACKAGE)-$(KVERREL).log
+
+localrpm: $(LOGS_DIR) rpm-tree
+	@echo "### Building binary RPMs"
+	$(RPM) -bb $(RPM_OPTIONS) $(rpm-specfile) >& $(LOGS_DIR)/build-$(PACKAGE)-$(KVERREL).log
+
+localsrpm: getsrc rpm-tree
+	@echo "### Building source RPM"
+	$(RPM) -bs $(rpm-specfile)
+
+localrpms: localsrpm localrpm
+
+rpm: changelog localrpms svncommit svntag
+
+svncommit:
+	svn commit
+
+svntag:
+	-svn mkdir $(SVN_BASE)/releases/$(VERSION) -m "created directory $(VERSION)"
+	svn cp $(SVN_URL) $(SVN_BASE)/releases/$(VERSION)/$(RELEASE) -m "Tagged as $(KVERREL)"
+
+changelog:
+	svn log > ChangeLog
+	svn commit -m "Generated by svn log the `date '+%d_%b'`" ChangeLog
 
 clean:
-	@$(RM) -f *.spec
-	@$(RM) -rf SRPMS RPMS SOURCES SPECS BUILD BUILDROOT
-	@$(RM) -rf linux-$(KERVER).tar.* patch-$(PATCHFULLVER).*
-	@find -name '*~' -exec $(RM) {} \;
-	@echo
-	@echo "Cleaning complete"
-	@echo
+	rm -rf $(tar-patches) $(tar-patches-ts) $(rpm-dirs) BUILDROOT $(LOGS_DIR) *.xz *.sign
+	find . -name '*~' | xargs rm -f
+
+rpm-tree: $(rpm-dirs) $(rpm-specfile) $(rpm-variable-sources) $(rpm-immuable-sources)
+
+tar-patches: $(tar-patches)
+srpm-prep: tar-patches
+$(tar-patches): $(tar-patches-ts)
+	@echo "### Building patches tarball $(raw-tar-patches)"
+	@rm -rf $(BUILDDIR)
+	mkdir -p $(BUILDDIR)/$(patches-kverrel)
+	tar -C $(PATCHES_DIR) -cf - --exclude-vcs --exclude '*~' . | tar xf - -C $(BUILDDIR)/$(patches-kverrel)
+	cd $(BUILDDIR); tar cfa $(raw-tar-patches) $(patches-kverrel)
+	mv $(BUILDDIR)/$(raw-tar-patches) $@
+	rm -rf $(BUILDDIR)
+
+$(tar-patches-ts)::
+	@if [ -f $@ ]; then \
+		m=`find $(PATCHES_DIR)/ -newer $@`; \
+		[ -z "$$m" ] || touch $@; \
+	else \
+		touch $@; \
+	fi
+
+# Local Variables:
+# tab-width: 8
+# End:
